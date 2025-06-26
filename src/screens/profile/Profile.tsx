@@ -5,6 +5,7 @@ import { useState } from 'react';
 import astronaut from '../../assets/profile-astronaut.jpg';
 import { CustomText as Text } from '../../components/CustomText';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 interface Drop {
   id: string;
@@ -148,6 +149,7 @@ const formatNumber = (num: number): string => {
 
 export default function Profile() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'drops' | 'liked' | 'groups'>('drops');
 
   const totalLikes = mockDrops.reduce((sum, drop) => sum + drop.likes, 0);
@@ -247,8 +249,8 @@ export default function Profile() {
                 <Ionicons name="checkmark" size={16} color="white" />
               </View>
             </View>
-            <Text className="text-white text-2xl font-bold mb-1">@meme_creator</Text>
-            <Text className="text-zinc-400 text-sm mb-3">Turning code into comedy since 2024</Text>
+            <Text className="text-white text-2xl font-bold mb-1">@{user?.username || 'username'}</Text>
+            <Text className="text-zinc-400 text-sm mb-3">{user?.bio || 'Welcome to BitDrop!'}</Text>
             <TouchableOpacity className="border border-zinc-700 rounded-full px-6 py-2">
               <Text className="text-white font-medium">Edit Profile</Text>
             </TouchableOpacity>

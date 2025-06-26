@@ -203,35 +203,6 @@ export const BitDropBrand: React.FC = () => {
           </Text>
         </View>
       </View>
-      
-      {/* Size variations */}
-      <View style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        gap: 30,
-        marginTop: 20
-      }}>
-        <View style={{ alignItems: 'center' }}>
-          <BitDropLogoCompact width={60} height={60} />
-          <Text style={{ color: '#71717a', fontSize: 12, marginTop: 8 }}>Compact</Text>
-        </View>
-        <View style={{ alignItems: 'center' }}>
-          <BitDropIcon width={32} height={32} />
-          <Text style={{ color: '#71717a', fontSize: 12, marginTop: 8 }}>Icon</Text>
-        </View>
-      </View>
-
-      {/* Color palette showcase */}
-      <View style={{ marginTop: 40, alignItems: 'center' }}>
-        <Text style={{ color: '#71717a', fontSize: 14, marginBottom: 12 }}>Brand Colors</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <View style={{ width: 20, height: 20, backgroundColor: '#00D9FF', borderRadius: 10 }} />
-          <View style={{ width: 20, height: 20, backgroundColor: '#7C3AED', borderRadius: 10 }} />
-          <View style={{ width: 20, height: 20, backgroundColor: '#EC4899', borderRadius: 10 }} />
-          <View style={{ width: 20, height: 20, backgroundColor: '#F59E0B', borderRadius: 10 }} />
-        </View>
-      </View>
     </View>
   );
 };

@@ -3,6 +3,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BitDropIcon, BitDropLogoCompact } from '../../components/BitDropLogo';
+import { checkUsernameAndEmail } from '../../api/availability';
+import { loginUser, signUpUser } from '../../api/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Navigation types
 type AuthStackParamList = {
@@ -46,23 +50,40 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
     ]).start();
   }, []);
 
-  const validateStep1 = () => {
+  const validateStep1 = async () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.username) {
       newErrors.username = 'Username is required';
     } else if (formData.username.length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
     }
-    
+
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email is invalid';
     }
-    
+
+    console.log('Initial validation errors:', newErrors);
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length > 0) return false;
+
+    try {
+      console.log('Calling checkUsernameAndEmail...');
+      await checkUsernameAndEmail(formData.username, formData.email);
+      console.log('Username and email are available');
+      return true;
+    } catch (err: any) {
+      const message = err.message || '';
+      if (message.toLowerCase().includes('username')) {
+        newErrors.username = 'Username is already taken';
+      }
+      if (message.toLowerCase().includes('email')) {
+        newErrors.email = 'Email is already in use';
+      }
+    }
   };
 
   const validateStep2 = () => {
@@ -84,9 +105,22 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (currentStep === 1 && validateStep1()) {
+  const handleNext = async () => {
+    console.log('Continue button pressed');
+    const isValid = await validateStep1();
+    if (!isValid) return;
+
+    try {
+      await checkUsernameAndEmail(formData.username, formData.email);
       setCurrentStep(2);
+    } catch (err: any) {
+      const message = err.message || '';
+      const newErrors: Record<string, string> = {};
+
+      if (message.includes('Username')) newErrors.username = message;
+      if (message.includes('Email')) newErrors.email = message;
+
+      setErrors(newErrors);
     }
   };
 
@@ -94,11 +128,57 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
     if (!validateStep2()) return;
     
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // 1. Sign up the user
+      await signUpUser({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      // 2. Immediately log them in
+      const response = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      // 3. Save token (adjust if you're using secure storage, context, etc.)
+      const { token } = response;
+      await AsyncStorage.setItem('authToken', token);
+      // Example: await AsyncStorage.setItem('authToken', token);
+
+      // 4. Navigate to the Home screen
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'MainTabs',
+            state: {
+              index: 0,
+              routes: [{ name: 'Home' }],
+            },
+          },
+        ],
+      });
+    } catch (err: any) {
+      const message = err.message || '';
+      const newErrors: Record<string, string> = {};
+
+      if (message.toLowerCase().includes('username')) {
+        newErrors.username = 'Username is already taken';
+      }
+      if (message.toLowerCase().includes('email')) {
+        newErrors.email = 'Email is already in use';
+      }
+      if (Object.keys(newErrors).length === 0) {
+        // Generic fallback
+        newErrors.password = 'Something went wrong. Please try again.';
+      }
+
+      setErrors(newErrors);
+    } finally {
       setIsLoading(false);
-      // Navigate to verification or main app
-    }, 1500);
+    }
   };
 
   const updateFormData = (field: string, value: string) => {
@@ -107,6 +187,31 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
+
+  const StepDot = ({ step }: { step: number }) => (
+    <View key={step} className="flex-row items-center">
+      <LinearGradient
+        colors={currentStep >= step ? ['#8B5CF6', '#3B82F6'] : ['#27272a', '#27272a']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}
+      >
+        {currentStep > step ? (
+          <Ionicons name="checkmark" size={16} color="white" />
+        ) : (
+          <Text className="text-white text-sm font-bold">{step}</Text>
+        )}
+      </LinearGradient>
+      {step < 2 && (
+        <LinearGradient
+          colors={currentStep > step ? ['#8B5CF6', '#3B82F6'] : ['#27272a', '#27272a']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ height: 2, width: 48, marginHorizontal: 8, borderRadius: 1 }}
+        />
+      )}
+    </View>
+  );
 
   return (
     <View className="flex-1 bg-black">
@@ -118,24 +223,7 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
           <View className="flex-1 items-center">
             <View className="flex-row items-center">
-              {[1, 2].map((step) => (
-                <View key={step} className="flex-row items-center">
-                  <View className={`w-8 h-8 rounded-full items-center justify-center ${
-                    currentStep >= step ? 'bg-gradient-to-r from-purple-500 to-blue-500' : 'bg-zinc-800'
-                  }`}>
-                    {currentStep > step ? (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    ) : (
-                      <Text className="text-white text-sm font-bold">{step}</Text>
-                    )}
-                  </View>
-                  {step < 2 && (
-                    <View className={`w-12 h-0.5 mx-2 ${
-                      currentStep > step ? 'bg-gradient-to-r from-purple-500 to-blue-500' : 'bg-zinc-800'
-                    }`} />
-                  )}
-                </View>
-              ))}
+              {[1, 2].map(step => <StepDot step={step} key={`step-${step}`} />)}
             </View>
           </View>
           <View className="w-6" />
@@ -158,20 +246,16 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
             >
               {/* Header */}
               <View className="items-center mt-8 mb-12">
-                <LinearGradient
-                  colors={['#8B5CF6', '#3B82F6', '#06B6D4']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="w-20 h-20 rounded-2xl items-center justify-center mb-6"
-                >
-                  <Text className="text-3xl">🎭</Text>
-                </LinearGradient>
+                <View className='flex-row items-center mb-6'>
+                  <BitDropIcon />
+                  <Text className="text-3xl text-white font-black">BitDrop</Text>
+                </View>
                 <Text className="text-white text-3xl font-bold mb-2">
                   {currentStep === 1 ? 'Create Account' : 'Secure Your Account'}
                 </Text>
                 <Text className="text-zinc-400 text-center text-base">
                   {currentStep === 1 
-                    ? 'Join the community of meme creators' 
+                    ? 'Join the community of competitors and creators' 
                     : 'Choose a strong password to protect your account'
                   }
                 </Text>
@@ -179,8 +263,8 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
 
               {/* Step 1: Basic Info */}
               {currentStep === 1 && (
-                <View className="space-y-6">
-                  <View>
+                <View>
+                  <View className="mb-4">
                     <Text className="text-white text-sm font-medium mb-2">Username</Text>
                     <View className={`flex-row items-center bg-zinc-900 rounded-xl px-4 py-4 border ${
                       errors.username ? 'border-red-500' : 'border-zinc-800'
@@ -228,7 +312,7 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
                       colors={['#8B5CF6', '#3B82F6']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      className="rounded-xl py-4 items-center"
+                      style={{ borderRadius: 10, paddingHorizontal: 4, paddingVertical: 12, alignItems: 'center', justifyContent: 'center'  }}
                     >
                       <Text className="text-white font-semibold text-base">Continue</Text>
                     </LinearGradient>
@@ -238,8 +322,8 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
 
               {/* Step 2: Password */}
               {currentStep === 2 && (
-                <View className="space-y-6">
-                  <View>
+                <View className="">
+                  <View className='mb-4'>
                     <Text className="text-white text-sm font-medium mb-2">Password</Text>
                     <View className={`flex-row items-center bg-zinc-900 rounded-xl px-4 py-4 border ${
                       errors.password ? 'border-red-500' : 'border-zinc-800'
@@ -296,7 +380,7 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
                   <View className="flex-row space-x-4 mt-8">
                     <TouchableOpacity 
                       onPress={() => setCurrentStep(1)}
-                      className="flex-1 bg-zinc-800 rounded-xl py-4 items-center"
+                      className="flex-1 bg-zinc-800 rounded-xl py-4 items-center mr-2"
                     >
                       <Text className="text-white font-semibold text-base">Back</Text>
                     </TouchableOpacity>
@@ -309,7 +393,7 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
                         colors={['#8B5CF6', '#3B82F6']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
-                        className="rounded-xl py-4 items-center"
+                        style={{ borderRadius: 10, paddingHorizontal: 4, paddingVertical: 15, alignItems: 'center', justifyContent: 'center'  }}
                       >
                         {isLoading ? (
                           <View className="flex-row items-center">
@@ -344,7 +428,7 @@ export function SignUpScreen({ navigation }: { navigation: any }) {
                     colors={['#8B5CF6', '#3B82F6']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={{ borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2 }}
+                    style={{ borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 }}
                   >
                     <Text className="text-white font-semibold">Sign In</Text>
                   </LinearGradient>

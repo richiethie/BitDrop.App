@@ -10,7 +10,10 @@ import Leaderboard from '../screens/leaderboard/Leaderboard';
 import { Ionicons } from '@expo/vector-icons';
 import GroupStack from './GroupStack';
 import AuthStackNavigator from './AuthStack';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { ActivityIndicator } from 'react-native';
+import { BitDropBrand } from '../components/BitDropLogo';
 
 // Type definitions
 
@@ -121,18 +124,45 @@ function MainTabs() {
 }
 
 export default function RootNavigator(): React.JSX.Element {
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Replace with real auth check
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null); // null = loading
+
+  useEffect(() => {
+    // Initial session check
+    const checkInitialAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      setIsAuthenticated(!!data.session?.access_token);
+    };
+
+    checkInitialAuth();
+
+    // Subscribe to auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.access_token);
+    });
+
+    // Cleanup the subscription on unmount
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (isAuthenticated === null) {
+    // You can style this however you'd like
+    return (
+      <View className="flex-1 justify-center items-center bg-black">
+        <BitDropBrand  />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {/* {isAuthenticated ? (
+        {isAuthenticated ? (
           <RootStack.Screen name="MainTabs" component={MainTabs} />
         ) : (
           <RootStack.Screen name="Auth" component={AuthStackNavigator} />
-        )} */}
-        <RootStack.Screen name="MainTabs" component={MainTabs} />
-        <RootStack.Screen name="Auth" component={AuthStackNavigator} />
+        )}
       </RootStack.Navigator>
     </NavigationContainer>
   );
